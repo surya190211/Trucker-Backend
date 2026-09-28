@@ -13,7 +13,7 @@ class DailyLogSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = DailyLog
-        exclude = ('daily_log',)
+        fields = '__all__'
 
     def get_summary(self, obj):
         totals = {1: 0.0, 2: 0.0, 3: 0.0, 4: 0.0}
