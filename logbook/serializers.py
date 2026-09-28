@@ -71,3 +71,30 @@ class DailyLogSerializer(serializers.ModelSerializer):
             for entry_data in entries_data
         ])
         return daily_log
+
+from .models import Driver, Truck, Trip, MaintenanceRecord, Notification
+
+class DriverSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Driver
+        fields = '__all__'
+
+class TruckSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Truck
+        fields = '__all__'
+
+class TripSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Trip
+        fields = '__all__'
+
+class MaintenanceRecordSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MaintenanceRecord
+        fields = '__all__'
+
+class NotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Notification
+        fields = '__all__'
