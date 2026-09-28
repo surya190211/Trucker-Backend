@@ -66,6 +66,8 @@ class DailyLogSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         entries_data = validated_data.pop('entries')
         daily_log = DailyLog.objects.create(**validated_data)
-        for entry_data in entries_data:
-            StatusEntry.objects.create(daily_log=daily_log, **entry_data)
+        StatusEntry.objects.bulk_create([
+            StatusEntry(daily_log=daily_log, **entry_data)
+            for entry_data in entries_data
+        ])
         return daily_log
