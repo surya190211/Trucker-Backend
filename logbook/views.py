@@ -49,3 +49,33 @@ class HOSComplianceView(APIView):
                 **compliance
             }
         })
+
+from .services.routing import geocode, get_route
+from .services.trip_planner import generate_schedule, split_days
+
+class TripPlanView(APIView):
+    def post(self, request, *args, **kwargs):
+        data = request.data
+        curr_loc = data.get('current_location', '')
+        pickup = data.get('pickup_location', '')
+        dropoff = data.get('dropoff_location', '')
+        cycle = float(data.get('current_cycle_hours', 0))
+        
+        # Geocode
+        c_lon, c_lat = geocode(curr_loc)
+        p_lon, p_lat = geocode(pickup)
+        d_lon, d_lat = geocode(dropoff)
+        
+        dist, dur, geom = get_route(p_lon, p_lat, d_lon, d_lat)
+        
+        from datetime import datetime
+        schedule = generate_schedule(dist, dur, datetime.now(), cycle)
+        days = split_days(schedule)
+        
+        return Response({
+            "trip": {"distance_miles": dist, "estimated_duration_hours": dur},
+            "summary": {"driving_hours": dur},
+            "route": {"geometry": geom},
+            "stops": [],
+            "days": days
+        })
