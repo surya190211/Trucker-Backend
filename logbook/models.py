@@ -94,8 +94,8 @@ class DailyLog(models.Model):
     driver_name = models.CharField(max_length=100) # Kept for backward compatibility
     driver = models.ForeignKey(Driver, on_delete=models.CASCADE, null=True, blank=True, related_name='logs')
     tractor_number = models.CharField(max_length=50)
-    trailer_number = models.CharField(max_length=50, blank=True)
-    shipper_commodity = models.CharField(max_length=100, blank=True)
+    trailer_number = models.CharField(max_length=50, blank=True, null=True, default='')
+    shipper_commodity = models.CharField(max_length=100, blank=True, null=True, default='')
     total_miles_driven = models.IntegerField(default=0)
     signature = models.CharField(max_length=100)
     created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
