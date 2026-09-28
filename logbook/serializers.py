@@ -5,7 +5,7 @@ from datetime import datetime, date
 class StatusEntrySerializer(serializers.ModelSerializer):
     class Meta:
         model = StatusEntry
-        fields = '__all__'
+        exclude = ('daily_log',)
 
 class DailyLogSerializer(serializers.ModelSerializer):
     entries = StatusEntrySerializer(many=True)
@@ -13,7 +13,7 @@ class DailyLogSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = DailyLog
-        fields = '__all__'
+        exclude = ('daily_log',)
 
     def get_summary(self, obj):
         totals = {1: 0.0, 2: 0.0, 3: 0.0, 4: 0.0}
@@ -58,7 +58,7 @@ class DailyLogSerializer(serializers.ModelSerializer):
                 if start < prev_end:
                     raise serializers.ValidationError("Overlapping time entries detected.")
 
-        if total_seconds != 86400: # 24 hours * 60 * 60
+        if total_seconds < 86300 or total_seconds > 86400: # Allow 23:59 end time
             raise serializers.ValidationError(f"Total time must equal exactly 24 hours. Currently: {total_seconds / 3600.0} hours.")
 
         return data
