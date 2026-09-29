@@ -17,8 +17,8 @@ class TripPlannerTests(TestCase):
             "total_duration_hours": 2,
             "geometry": {},
             "legs": [
-                {"name": "current_to_pickup", "distance_miles": 50, "duration_hours": 1},
-                {"name": "pickup_to_dropoff", "distance_miles": 50, "duration_hours": 1}
+                {"name": "current_to_pickup", "distance_miles": 50, "duration_hours": 1, "end_location": "MockLocation"},
+                {"name": "pickup_to_dropoff", "distance_miles": 50, "duration_hours": 1, "end_location": "MockLocation"}
             ]
         }
         
@@ -35,42 +35,67 @@ class TripPlannerTests(TestCase):
         stops = data['stops']
         self.assertTrue(any(s['type'] == 'PICKUP' for s in stops))
         self.assertTrue(any(s['type'] == 'DROPOFF' for s in stops))
+        
+        # Test complete summary
+        summary = data['summary']
+        self.assertIn("driving_hours", summary)
+        self.assertIn("on_duty_hours", summary)
+        self.assertIn("off_duty_hours", summary)
+        self.assertIn("sleeper_hours", summary)
+        self.assertIn("cycle_hours_used", summary)
+        self.assertIn("cycle_hours_remaining", summary)
+        self.assertIn("fuel_stops", summary)
+        self.assertIn("break_stops", summary)
+        self.assertIn("rest_stops", summary)
+        self.assertIn("days", summary)
+        
+        # Test pickup/dropoff duration
+        pickup = next(s for s in stops if s["type"] == "PICKUP")
+        dropoff = next(s for s in stops if s["type"] == "DROPOFF")
+        
+        p_start = datetime.fromisoformat(pickup["start"])
+        p_end = datetime.fromisoformat(pickup["end"])
+        d_start = datetime.fromisoformat(dropoff["start"])
+        d_end = datetime.fromisoformat(dropoff["end"])
+        
+        self.assertEqual((p_end - p_start).total_seconds() / 3600, 1.0)
+        self.assertEqual((d_end - d_start).total_seconds() / 3600, 1.0)
 
     def test_8_hours_driving_break(self):
-        legs = [{"name": "current_to_pickup", "distance_miles": 550, "duration_hours": 9.0}]
+        legs = [{"name": "current_to_pickup", "distance_miles": 550, "duration_hours": 9.0, "end_location": "MockLocation"}]
         schedule = generate_schedule(legs, datetime.now(), 0)
         breaks = [s for s in schedule if s.get('stop_type') == 'BREAK']
         self.assertEqual(len(breaks), 1)
 
     def test_11_hours_driving_rest(self):
-        legs = [{"name": "current_to_pickup", "distance_miles": 720, "duration_hours": 12.0}]
+        legs = [{"name": "current_to_pickup", "distance_miles": 720, "duration_hours": 12.0, "end_location": "MockLocation"}]
         schedule = generate_schedule(legs, datetime.now(), 0)
         rests = [s for s in schedule if s.get('stop_type') == 'REST']
         self.assertTrue(len(rests) >= 1)
 
     def test_14_hour_window_exhaustion(self):
         legs = [
-            {"name": "current_to_pickup", "distance_miles": 500, "duration_hours": 10.0},
-            {"name": "pickup_to_dropoff", "distance_miles": 200, "duration_hours": 3.0}
+            {"name": "current_to_pickup", "distance_miles": 500, "duration_hours": 10.0, "end_location": "MockLocation"},
+            {"name": "pickup_to_dropoff", "distance_miles": 200, "duration_hours": 3.0, "end_location": "MockLocation"}
         ]
         schedule = generate_schedule(legs, datetime.now(), 0)
         rests = [s for s in schedule if s.get('stop_type') == 'REST']
         self.assertTrue(len(rests) >= 1)
 
     def test_cycle_near_70(self):
-        legs = [{"name": "current_to_pickup", "distance_miles": 100, "duration_hours": 2.0}]
+        legs = [{"name": "current_to_pickup", "distance_miles": 100, "duration_hours": 2.0, "end_location": "MockLocation"}]
         schedule = generate_schedule(legs, datetime.now(), 68.0)
         rests = [s for s in schedule if s.get('stop_type') == 'REST' and s['duration'] == 34.0]
         self.assertTrue(len(rests) >= 1)
 
     def test_1000_miles_fuel(self):
-        legs = [{"name": "current_to_pickup", "distance_miles": 1100, "duration_hours": 17.0}]
+        legs = [{"name": "current_to_pickup", "distance_miles": 1100, "duration_hours": 17.0, "end_location": "MockLocation"}]
         schedule = generate_schedule(legs, datetime.now(), 0)
         fuels = [s for s in schedule if s.get('stop_type') == 'FUEL']
         self.assertTrue(len(fuels) >= 1)
 
     def test_long_trip_multiple_days(self):
-        legs = [{"name": "current_to_pickup", "distance_miles": 2000, "duration_hours": 30.0}]
+        legs = [{"name": "current_to_pickup", "distance_miles": 2000, "duration_hours": 30.0, "end_location": "MockLocation"}]
         schedule = generate_schedule(legs, datetime.fromisoformat('2026-09-28T10:00:00'), 0)
         days = split_days(schedule)
         self.assertTrue(len(days) > 2)

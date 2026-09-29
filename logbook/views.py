@@ -91,7 +91,12 @@ class TripPlanView(APIView):
         stops = []
         driving_hours = 0
         on_duty_hours = 0
-        cycle_used = cycle
+        off_duty_hours = 0
+        sleeper_hours = 0
+        cycle_hours_used = cycle
+        fuel_stops = 0
+        break_stops = 0
+        rest_stops = 0
         
         for seg in schedule:
             if "stop_type" in seg:
@@ -103,19 +108,29 @@ class TripPlanView(APIView):
                     "reason": seg["reason"],
                     "mileage": seg["miles"]
                 })
+                if seg["stop_type"] == "FUEL":
+                    fuel_stops += 1
+                elif seg["stop_type"] == "BREAK":
+                    break_stops += 1
+                elif seg["stop_type"] == "REST" or seg["stop_type"] == "RESTART":
+                    rest_stops += 1
             
             dur = seg["duration"]
             if seg["status"] == "DRIVING":
                 driving_hours += dur
                 on_duty_hours += dur
-                cycle_used += dur
+                cycle_hours_used += dur
             elif seg["status"] == "ON DUTY":
                 on_duty_hours += dur
-                cycle_used += dur
-            elif seg["status"] == "OFF DUTY" and seg.get("stop_type") == "REST" and seg["duration"] == 34.0:
-                cycle_used = 0
+                cycle_hours_used += dur
+            elif seg["status"] == "OFF DUTY":
+                off_duty_hours += dur
+                if seg.get("stop_type") == "RESTART" or (seg.get("stop_type") == "REST" and dur >= 34.0):
+                    cycle_hours_used = 0
+            elif seg["status"] == "SLEEPER BERTH":
+                sleeper_hours += dur
         
-        cycle_remaining = max(0, 70.0 - cycle_used)
+        cycle_hours_remaining = max(0, 70.0 - cycle_hours_used)
         
         # Add summary data to days
         for day in days:
@@ -139,8 +154,13 @@ class TripPlanView(APIView):
             "summary": {
                 "driving_hours": driving_hours,
                 "on_duty_hours": on_duty_hours,
-                "cycle_used": cycle_used,
-                "cycle_remaining": cycle_remaining,
+                "off_duty_hours": off_duty_hours,
+                "sleeper_hours": sleeper_hours,
+                "cycle_hours_used": cycle_hours_used,
+                "cycle_hours_remaining": cycle_hours_remaining,
+                "fuel_stops": fuel_stops,
+                "break_stops": break_stops,
+                "rest_stops": rest_stops,
                 "days": len(days)
             },
             "route": {
