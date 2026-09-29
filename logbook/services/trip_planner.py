@@ -76,7 +76,7 @@ def generate_schedule(legs, start_time, current_cycle_hours):
                 # Ensure we have duty/cycle for fuel
                 while MAX_DUTY - duty_today < fuel_dur or CYCLE_LIMIT - cycle_used < fuel_dur:
                     if cycle_used >= CYCLE_LIMIT:
-                        add_segment("OFF DUTY", 34.0, "Rest Stop", "34-Hour Restart", stop_type="REST")
+                        add_segment("OFF DUTY", 34.0, "Rest Stop", "34-Hour Restart", stop_type="RESTART")
                         cycle_used = 0
                         driving_today = 0
                         duty_today = 0
@@ -97,7 +97,7 @@ def generate_schedule(legs, start_time, current_cycle_hours):
             if max_possible_drive <= 0:
                 # Must rest or restart
                 if cycle_used >= CYCLE_LIMIT:
-                    add_segment("OFF DUTY", 34.0, "Rest Stop", "34-Hour Restart", stop_type="REST")
+                    add_segment("OFF DUTY", 34.0, "Rest Stop", "34-Hour Restart", stop_type="RESTART")
                     cycle_used = 0
                     driving_today = 0
                     duty_today = 0
@@ -143,7 +143,7 @@ def generate_schedule(legs, start_time, current_cycle_hours):
         if leg["name"] == "current_to_pickup":
             while MAX_DUTY - duty_today < PICKUP_DUR or CYCLE_LIMIT - cycle_used < PICKUP_DUR:
                 if cycle_used >= CYCLE_LIMIT:
-                    add_segment("OFF DUTY", 34.0, "Rest Stop", "34-Hour Restart", stop_type="REST")
+                    add_segment("OFF DUTY", 34.0, "Rest Stop", "34-Hour Restart", stop_type="RESTART")
                     cycle_used = 0
                     driving_today = 0
                     duty_today = 0
@@ -162,7 +162,7 @@ def generate_schedule(legs, start_time, current_cycle_hours):
         elif leg["name"] == "pickup_to_dropoff":
             while MAX_DUTY - duty_today < DROPOFF_DUR or CYCLE_LIMIT - cycle_used < DROPOFF_DUR:
                 if cycle_used >= CYCLE_LIMIT:
-                    add_segment("OFF DUTY", 34.0, "Rest Stop", "34-Hour Restart", stop_type="REST")
+                    add_segment("OFF DUTY", 34.0, "Rest Stop", "34-Hour Restart", stop_type="RESTART")
                     cycle_used = 0
                     driving_today = 0
                     duty_today = 0

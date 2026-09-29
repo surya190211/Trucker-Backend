@@ -85,7 +85,7 @@ class TripPlannerTests(TestCase):
     def test_cycle_near_70(self):
         legs = [{"name": "current_to_pickup", "distance_miles": 100, "duration_hours": 2.0, "end_location": "MockLocation"}]
         schedule = generate_schedule(legs, datetime.now(), 68.0)
-        rests = [s for s in schedule if s.get('stop_type') == 'REST' and s['duration'] == 34.0]
+        rests = [s for s in schedule if s.get('stop_type') == 'RESTART' and s['duration'] == 34.0]
         self.assertTrue(len(rests) >= 1)
 
     def test_1000_miles_fuel(self):

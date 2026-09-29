@@ -106,7 +106,8 @@ class TripPlanView(APIView):
                     "start": seg["start"],
                     "end": seg["end"],
                     "reason": seg["reason"],
-                    "mileage": seg["miles"]
+                    "miles": seg["miles"],
+                    "duration_hours": seg["duration"]
                 })
                 if seg["stop_type"] == "FUEL":
                     fuel_stops += 1
