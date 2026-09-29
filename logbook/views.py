@@ -1,14 +1,16 @@
 from rest_framework import viewsets
-from .models import DailyLog
-from .serializers import DailyLogSerializer
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from datetime import datetime
+from .models import DailyLog, Driver, Truck, Trip, MaintenanceRecord, Notification
+from .serializers import DailyLogSerializer, DriverSerializer, TruckSerializer, TripSerializer, MaintenanceRecordSerializer, NotificationSerializer
+from .services.hos import check_hos_compliance
+from .services.routing import geocode, get_trip_route
+from .services.trip_planner import generate_schedule, split_days
 
 class DailyLogViewSet(viewsets.ModelViewSet):
     queryset = DailyLog.objects.all().prefetch_related('entries')
     serializer_class = DailyLogSerializer
-
-from .models import Driver, Truck, Trip, MaintenanceRecord, Notification
-from .serializers import DriverSerializer, TruckSerializer, TripSerializer, MaintenanceRecordSerializer, NotificationSerializer
-from rest_framework import viewsets
 
 class DriverViewSet(viewsets.ModelViewSet):
     queryset = Driver.objects.all()
@@ -30,19 +32,20 @@ class NotificationViewSet(viewsets.ModelViewSet):
     queryset = Notification.objects.all()
     serializer_class = NotificationSerializer
 
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from .services.hos import check_hos_compliance
-from .models import DailyLog
 
 class HOSComplianceView(APIView):
     def get(self, request, *args, **kwargs):
         latest_log = DailyLog.objects.order_by('-date').first()
         if not latest_log:
-            return Response({"error": "No logs found to calculate compliance."}, status=404)
+            return Response({
+                "has_data": False,
+                "message": "No daily logs available yet.",
+                "data": None
+            }, status=200)
         
         compliance = check_hos_compliance(latest_log.entries.all())
         return Response({
+            "has_data": True,
             "data": {
                 "driver": latest_log.driver_name,
                 "date": latest_log.date,
@@ -50,32 +53,105 @@ class HOSComplianceView(APIView):
             }
         })
 
-from .services.routing import geocode, get_route
-from .services.trip_planner import generate_schedule, split_days
 
 class TripPlanView(APIView):
     def post(self, request, *args, **kwargs):
         data = request.data
-        curr_loc = data.get('current_location', '')
-        pickup = data.get('pickup_location', '')
-        dropoff = data.get('dropoff_location', '')
-        cycle = float(data.get('current_cycle_hours', 0))
+        curr_loc = data.get('current_location')
+        pickup = data.get('pickup_location')
+        dropoff = data.get('dropoff_location')
+        cycle = data.get('current_cycle_hours')
         
-        # Geocode
-        c_lon, c_lat = geocode(curr_loc)
-        p_lon, p_lat = geocode(pickup)
-        d_lon, d_lat = geocode(dropoff)
+        if not curr_loc or not pickup or not dropoff or cycle is None:
+            return Response({"error": "Missing required fields (current_location, pickup_location, dropoff_location, current_cycle_hours)."}, status=400)
+            
+        try:
+            cycle = float(cycle)
+            if cycle < 0 or cycle > 70:
+                return Response({"error": "Cycle hours must be between 0 and 70."}, status=400)
+        except ValueError:
+            return Response({"error": "Invalid cycle hours."}, status=400)
         
-        dist, dur, geom = get_route(p_lon, p_lat, d_lon, d_lat)
+        try:
+            c_coords = geocode(curr_loc)
+            p_coords = geocode(pickup)
+            d_coords = geocode(dropoff)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=400)
         
-        from datetime import datetime
-        schedule = generate_schedule(dist, dur, datetime.now(), cycle)
+        try:
+            route_data = get_trip_route(c_coords, p_coords, d_coords)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=400)
+            
+        schedule = generate_schedule(route_data["legs"], datetime.now(), cycle)
         days = split_days(schedule)
         
+        # Build stops and calculate totals
+        stops = []
+        driving_hours = 0
+        on_duty_hours = 0
+        cycle_used = cycle
+        
+        for seg in schedule:
+            if "stop_type" in seg:
+                stops.append({
+                    "type": seg["stop_type"],
+                    "location": seg["location"],
+                    "start": seg["start"],
+                    "end": seg["end"],
+                    "reason": seg["reason"],
+                    "mileage": seg["miles"]
+                })
+            
+            dur = seg["duration"]
+            if seg["status"] == "DRIVING":
+                driving_hours += dur
+                on_duty_hours += dur
+                cycle_used += dur
+            elif seg["status"] == "ON DUTY":
+                on_duty_hours += dur
+                cycle_used += dur
+            elif seg["status"] == "OFF DUTY" and seg.get("stop_type") == "REST" and seg["duration"] == 34.0:
+                cycle_used = 0
+        
+        cycle_remaining = max(0, 70.0 - cycle_used)
+        
+        # Add summary data to days
+        for day in days:
+            d_dr = sum(s["duration"] for s in day["segments"] if s["status"] == "DRIVING")
+            d_od = sum(s["duration"] for s in day["segments"] if s["status"] == "ON DUTY")
+            d_sb = sum(s["duration"] for s in day["segments"] if s["status"] == "SLEEPER BERTH")
+            d_off = sum(s["duration"] for s in day["segments"] if s["status"] == "OFF DUTY")
+            day["totals"] = {
+                "driving": d_dr,
+                "on_duty": d_od,
+                "sleeper": d_sb,
+                "off_duty": d_off,
+                "total": d_dr + d_od + d_sb + d_off
+            }
+
         return Response({
-            "trip": {"distance_miles": dist, "estimated_duration_hours": dur},
-            "summary": {"driving_hours": dur},
-            "route": {"geometry": geom},
-            "stops": [],
+            "trip": {
+                "distance_miles": route_data["total_distance_miles"],
+                "estimated_duration_hours": route_data["total_duration_hours"]
+            },
+            "summary": {
+                "driving_hours": driving_hours,
+                "on_duty_hours": on_duty_hours,
+                "cycle_used": cycle_used,
+                "cycle_remaining": cycle_remaining,
+                "days": len(days)
+            },
+            "route": {
+                "geometry": route_data["geometry"],
+                "waypoints": {
+                    "current": c_coords,
+                    "pickup": p_coords,
+                    "dropoff": d_coords
+                },
+                "legs": route_data["legs"]
+            },
+            "stops": stops,
             "days": days
         })

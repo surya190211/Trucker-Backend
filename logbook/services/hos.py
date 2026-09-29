@@ -29,11 +29,51 @@ def check_hos_compliance(entries):
     violations = []
     if driving > 11.0:
         violations.append(f"11-Hour Driving Limit Exceeded: Logged {round(driving, 2)} hrs")
-    if total_on_duty > 14.0:
-        violations.append(f"14-Hour Duty Window Exceeded: Logged {round(total_on_duty, 2)} hrs on duty")
-    if driving > 8.0:
-        # Assuming no 30 min break recorded in this simple check
-        violations.append("8-Hour Break Limit: Driving exceeded 8 hours without 30-min break")
+        
+    ordered_entries = sorted(entries, key=lambda x: x.start_time)
+    dummy_date = date.today()
+    
+    driving_since_break = 0.0
+    elapsed_window = 0.0
+    shift_active = False
+    continuous_non_driving = 0.0
+    
+    for entry in ordered_entries:
+        start = datetime.combine(dummy_date, entry.start_time)
+        end = datetime.combine(dummy_date, entry.end_time)
+        if end < start:
+            end += timedelta(days=1)
+        dur = (end - start).total_seconds() / 3600.0
+        
+        if entry.duty_status in (3, 4):
+            if not shift_active:
+                shift_active = True
+                elapsed_window = dur
+            else:
+                elapsed_window += dur
+        else: # OFF DUTY or SLEEPER BERTH
+            if shift_active:
+                if dur >= 10.0:
+                    shift_active = False
+                    elapsed_window = 0.0
+                else:
+                    elapsed_window += dur
+        
+        if elapsed_window > 14.0:
+            if not any(v.startswith("14-Hour Duty Window Exceeded") for v in violations):
+                violations.append(f"14-Hour Duty Window Exceeded: Elapsed window reached {round(elapsed_window, 2)} hrs")
+                
+        # Break rule logic
+        if entry.duty_status == 3: # Driving
+            continuous_non_driving = 0.0
+            if driving_since_break + dur > 8.0:
+                if not any(v.startswith("8-Hour Break Limit") for v in violations):
+                    violations.append("8-Hour Break Limit: Driving exceeded 8 hours without 30-min break")
+            driving_since_break += dur
+        else:
+            continuous_non_driving += dur
+            if continuous_non_driving >= 0.5:
+                driving_since_break = 0.0
 
     return {
         "driving_hours": round(driving, 2),
@@ -41,7 +81,7 @@ def check_hos_compliance(entries):
         "off_duty_hours": round(off_duty, 2),
         "sleeper_hours": round(sleeper, 2),
         "driving_remaining": round(max(0, 11.0 - driving), 2),
-        "on_duty_remaining": round(max(0, 14.0 - total_on_duty), 2),
+        "on_duty_remaining": round(max(0, 14.0 - elapsed_window if shift_active else 14.0), 2),
         "is_compliant": len(violations) == 0,
         "violations": violations
     }
