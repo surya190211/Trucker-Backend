@@ -225,39 +225,46 @@ def split_days(schedule):
             current_day += timedelta(days=1)
             current_day_segments = []
             
-        if s_end.date() > current_day:
+        while s_end.date() > current_day:
             day_end = datetime.combine(current_day + timedelta(days=1), datetime.min.time())
             dur1 = (day_end - s_start).total_seconds() / 3600.0
-            dur2 = (s_end - day_end).total_seconds() / 3600.0
-            ratio = dur1 / (dur1 + dur2) if (dur1+dur2)>0 else 0
+            total_dur_left = (s_end - s_start).total_seconds() / 3600.0
+            ratio = dur1 / total_dur_left if total_dur_left > 0 else 0
             
-            part1 = {
+            part = {
                 "status": seg["status"],
                 "start": s_start.isoformat(),
                 "end": day_end.isoformat(),
                 "location": seg["location"],
-                "miles": seg["miles"] * ratio,
+                "miles": seg.get("miles", 0) * ratio,
                 "reason": seg["reason"],
                 "duration": dur1
             }
-            if "stop_type" in seg: part1["stop_type"] = seg["stop_type"]
-            current_day_segments.append(part1)
+            if "stop_type" in seg: part["stop_type"] = seg["stop_type"]
+            current_day_segments.append(part)
             days.append({"date": current_day.isoformat(), "segments": current_day_segments})
             
             current_day += timedelta(days=1)
-            part2 = {
+            current_day_segments = []
+            
+            # Update s_start and remaining miles for the next iteration/final piece
+            s_start = day_end
+            seg["miles"] = seg.get("miles", 0) * (1 - ratio)
+            
+        # Final piece for the current_day (which is now >= the original s_end.date())
+        if s_start < s_end:
+            dur_final = (s_end - s_start).total_seconds() / 3600.0
+            final_part = {
                 "status": seg["status"],
-                "start": day_end.isoformat(),
+                "start": s_start.isoformat(),
                 "end": s_end.isoformat(),
                 "location": seg["location"],
-                "miles": seg["miles"] * (1 - ratio),
+                "miles": seg.get("miles", 0),
                 "reason": seg["reason"],
-                "duration": dur2
+                "duration": dur_final
             }
-            if "stop_type" in seg: part2["stop_type"] = seg["stop_type"]
-            current_day_segments = [part2]
-        else:
-            current_day_segments.append(seg)
+            if "stop_type" in seg: final_part["stop_type"] = seg["stop_type"]
+            current_day_segments.append(final_part)
             
     if current_day_segments:
         s_end = datetime.fromisoformat(current_day_segments[-1]["end"])
